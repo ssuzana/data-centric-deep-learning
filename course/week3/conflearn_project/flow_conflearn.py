@@ -168,6 +168,24 @@ class TrainIdentifyReview(FlowSpec):
       # --
       # probs_: np.array[float] (shape: |test set|)
       # ===============================================
+
+      X_train, y_train = torch.from_numpy(X[train_index]).float(), torch.from_numpy(y[train_index])
+      X_test, y_test = torch.from_numpy(X[test_index]).float(), torch.from_numpy(y[test_index])
+
+      train_ds = TensorDataset(X_train, y_train) 
+      test_ds = TensorDataset(X_test, y_test)
+
+      train_dl = DataLoader(train_ds, batch_size=self.config.train.optimizer.batch_size)
+      test_dl = DataLoader(test_ds, batch_size=self.config.train.optimizer.batch_size)
+
+      system = SentimentClassifierSystem(self.config)
+      trainer = Trainer(max_epochs=self.config.train.optimizer.max_epochs)
+
+      trainer.fit(system, train_dl)
+      #probs_ = np.squeeze(trainer.predict(system, test_dl).numpy())
+      probs_ = torch.cat(trainer.predict(system, dataloaders=test_dl)).squeeze(1).numpy()
+
+      # ===============================================
       assert probs_ is not None, "`probs_` is not defined."
       probs[test_index] = probs_
 
@@ -211,6 +229,12 @@ class TrainIdentifyReview(FlowSpec):
     # Types
     # --
     # ranked_label_issues: List[int]
+    # ===============================================
+    ranked_label_issues = find_label_issues(
+      self.all_df.label,
+      prob,
+      return_indices_ranked_by='self_confidence'
+      )
     # =============================
     assert ranked_label_issues is not None, "`ranked_label_issues` not defined."
 
@@ -307,6 +331,10 @@ class TrainIdentifyReview(FlowSpec):
     # dm.train_dataset.data = training slice of self.all_df
     # dm.dev_dataset.data = dev slice of self.all_df
     # dm.test_dataset.data = test slice of self.all_df
+    # ===============================================
+    dm.train_dataset.data = self.all_df.iloc[:train_size]
+    dm.dev_dataset.data = self.all_df.iloc[train_size: train_size + dev_size]
+    dm.test_dataset.data = self.all_df.iloc[train_size + dev_size:]
     # # ====================================
 
     # start from scratch
